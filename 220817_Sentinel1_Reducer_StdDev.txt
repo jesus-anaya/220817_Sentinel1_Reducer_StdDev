@@ -1,0 +1,86 @@
+var StudyArea = ee.FeatureCollection("users/jesusanayaco/Area_LBRPutumayo");
+
+//https://arset.gsfc.nasa.gov/land/webinars/forest-mapping-sar
+//https://arset.gsfc.nasa.gov/sites/default/files/land/20-SAR-Landcover/Session1_SAR_TimeSeries_Final_1.pdf
+//Session2_SAR_AERSET_LandCover_20200514.pdf
+//Load Sentinel-1 C-band SAR Ground Range collection (log scale, VV, descending)
+//var roi = newfc;
+
+
+          
+// 9 Load Sentinel-1 C-band SAR Ground Range collection (log scale, VV,descending)
+var collectionVV = ee.ImageCollection('COPERNICUS/S1_GRD')
+.filter(ee.Filter.eq('instrumentMode', 'IW'))
+.filter(ee.Filter.listContains('transmitterReceiverPolarisation', 'VV'))
+.filter(ee.Filter.eq('orbitProperties_pass', 'DESCENDING'))
+.filterMetadata('resolution_meters', 'equals' , 10)
+.filterDate('2020-01-01', '2022-09-01')
+.filterBounds(StudyArea)
+.select('VV');
+print(collectionVV, 'Collection VV'); 
+
+// 10 Load Sentinel-1 C-band SAR Ground Range collection (log scale, VH, descending)
+var collectionVH = ee.ImageCollection('COPERNICUS/S1_GRD')
+.filter(ee.Filter.eq('instrumentMode', 'IW'))
+.filter(ee.Filter.listContains('transmitterReceiverPolarisation', 'VH'))
+.filter(ee.Filter.eq('orbitProperties_pass', 'DESCENDING'))
+.filterMetadata('resolution_meters', 'equals' , 10)
+.filterDate('2020-01-01', '2022-09-01')
+.filterBounds(StudyArea)
+.select('VH');
+print(collectionVH, 'Collection VH');
+ 
+// 13 Filter by date
+var SARVV = collectionVV.filterDate('2020-01-01', '2020-09-01').mosaic();
+var SARVH = collectionVH.filterDate('2020-01-01', '2020-09-01').mosaic();
+
+// Compute the median in each band, each pixel.
+// Band names are B1_median, B2_median, etc.
+//var stdDevVV = collectionVH.reduce(ee.Reducer.stdDev());
+//var stdDevVH = collectionVH.reduce(ee.Reducer.stdDev());
+
+var stdDevVV = collectionVH.reduce(ee.Reducer.stdDev());
+var stdDevVH = collectionVV.reduce(ee.Reducer.stdDev());
+
+
+
+// 15  Add the SAR images to "layers" in order to display them
+Map.centerObject(StudyArea, 12);
+Map.addLayer(stdDevVV, {min:0,max:5}, 'SAR VV', 0);
+Map.addLayer(stdDevVH, {min:0,max:5}, 'SAR VH', 0);
+
+//21 Apply speckle filter to reduce speckle
+var SMOOTHING_RADIUS = 20;
+//var SARVV_filtered = SARVV.focal_mean(SMOOTHING_RADIUS, 'circle', 'meters');
+//var SARVH_filtered = SARVH.focal_mean(SMOOTHING_RADIUS, 'circle', 'meters');
+
+var SARVV_filtered = stdDevVV.focal_mean(SMOOTHING_RADIUS, 'circle', 'meters');
+var SARVH_filtered = stdDevVH.focal_mean(SMOOTHING_RADIUS, 'circle', 'meters');
+
+
+
+//22 Add speckle filtered images, Display the SAR filtered images
+Map.addLayer(SARVV_filtered, {min:0,max:5}, 'SAR VV Filtered',0);
+Map.addLayer(SARVH_filtered, {min:0,max:5}, 'SAR VH Filtered',0);
+
+var S1VV_filtered = SARVV_filtered.select('VV');
+      Export.image.toDrive({
+      image: SARVH_filtered,
+      description: 'S1_VH_stdDev',
+      scale: 10,
+      region: StudyArea,
+      maxPixels: 1e9,
+      fileFormat: 'GeoTIFF'
+      });
+
+
+var S1VH_filtered = SARVH_filtered.select('VH');
+      Export.image.toDrive({
+      image: SARVV_filtered,
+      description: 'S1_VV_stdDev',
+      scale: 10,
+      region: StudyArea,
+      maxPixels: 1e9,
+      fileFormat: 'GeoTIFF'
+      });
+ 
